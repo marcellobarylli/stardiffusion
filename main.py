@@ -6,14 +6,14 @@ import matplotlib.pyplot as plt
 from typing import Optional, List, Dict, Any
 
 # Import our modules
-from UNetFinetune import (
+from DiffusionCore import (
     DiffusionConfig,
     DiffusionModelLoader,
     DiffusionProcessor,
     DiffusionVisualizer,
-    main as run_generation
+    run_simple_generation
 )
-from DiffusionFineTuner import DiffusionTrainer, example_fine_tuning_script
+from DiffusionFineTuner import DiffusionTrainer, DatasetManager, example_fine_tuning_script
 
 
 def parse_args():
@@ -55,8 +55,8 @@ def parse_args():
         help="Hugging Face model ID of the diffusion model to fine-tune"
     )
     finetune_parser.add_argument(
-        "--dataset_path", type=str, required=True,
-        help="Path to the dataset for fine-tuning"
+        "--dataset", type=str, required=True,
+        help="Dataset to use for fine-tuning (can be a standard dataset name like 'cifar10' or a path to custom images)"
     )
     finetune_parser.add_argument(
         "--output_dir", type=str, default="fine_tuned_model",
@@ -79,7 +79,7 @@ def parse_args():
         help="Interval for saving checkpoints (in epochs)"
     )
     finetune_parser.add_argument(
-        "--gpus", type=str, default="0,1",
+        "--gpus", type=str, default="2,3",
         help="Comma-separated list of GPU IDs to use"
     )
     finetune_parser.add_argument(
@@ -105,11 +105,11 @@ def parse_args():
         help="Path to the fine-tuned model"
     )
     generate_ft_parser.add_argument(
-        "--num_steps", type=int, default=100,
+        "--num_steps", type=int, default=30,
         help="Number of denoising steps"
     )
     generate_ft_parser.add_argument(
-        "--batch_size", type=int, default=1,
+        "--batch_size", type=int, default=2,
         help="Batch size for generation"
     )
     generate_ft_parser.add_argument(
@@ -121,8 +121,14 @@ def parse_args():
         help="Directory to save generated images"
     )
     generate_ft_parser.add_argument(
-        "--gpus", type=str, default="0,1",
+        "--gpus", type=str, default="2,3",
         help="Comma-separated list of GPU IDs to use"
+    )
+    
+    # List available datasets command
+    list_datasets_parser = subparsers.add_parser(
+        "list_datasets", 
+        help="List available standard datasets for fine-tuning"
     )
     
     return parser.parse_args()
@@ -228,7 +234,7 @@ def finetune(args):
     
     # Prepare dataset
     dataloader = trainer.prepare_dataset(
-        dataset_path=args.dataset_path,
+        dataset_name_or_path=args.dataset,
         batch_size=args.batch_size,
         image_size=args.image_size,
         num_workers=args.num_workers
@@ -256,6 +262,17 @@ def finetune(args):
     print(f"Final loss: {losses[-1]:.6f}")
 
 
+def list_datasets():
+    """List all available standard datasets."""
+    available_datasets = DatasetManager.list_available_datasets()
+    
+    print("\nAvailable standard datasets:")
+    print("--------------------------")
+    for dataset in available_datasets:
+        print(f" - {dataset}")
+    print("\nYou can also use a path to your own custom image directory.")
+
+
 def main():
     """Main entry point."""
     args = parse_args()
@@ -266,10 +283,16 @@ def main():
         finetune(args)
     elif args.command == "generate_ft":
         generate_from_finetuned(args)
+    elif args.command == "list_datasets":
+        list_datasets()
     else:
         print("Please specify a command. Use --help for more information.")
-        # If no command is specified, run the simple generation example
-        run_generation()
+        print("\nAvailable commands:")
+        print("  generate      - Generate images with a diffusion model")
+        print("  finetune      - Fine-tune a diffusion model")
+        print("  generate_ft   - Generate images with a fine-tuned model")
+        print("  list_datasets - List available standard datasets for fine-tuning")
+        print("\nExample: python main.py finetune --dataset cifar10")
 
 
 if __name__ == "__main__":

@@ -5,13 +5,176 @@ from torch.utils.data import DataLoader, Dataset
 from diffusers import UNet2DModel, DDPMScheduler
 from typing import Dict, Optional, Union, List, Any
 import os
+import sys
+import subprocess
 from tqdm.auto import tqdm
 import numpy as np
 from PIL import Image
 import torchvision.transforms as transforms
+import torchvision.datasets as datasets
 
-# Import from our main module
-from UNetFinetune import DiffusionConfig, DiffusionModelLoader
+# Import from our core module
+from DiffusionCore import DiffusionConfig, DiffusionModelLoader
+
+
+class DatasetManager:
+    """Manages loading various datasets for diffusion model fine-tuning."""
+    
+    STANDARD_DATASETS = [
+        'cifar10', 'cifar100', 'mnist', 'fashion_mnist', 'svhn', 'stl10', 'lsun'
+    ]
+    
+    # Valid LSUN categories
+    LSUN_CATEGORIES = [
+        'bedroom', 'bridge', 'church_outdoor', 'classroom', 
+        'conference_room', 'dining_room', 'kitchen', 
+        'living_room', 'restaurant', 'tower'
+    ]
+    
+    @staticmethod
+    def download_lsun(category: str, data_dir: str = './data'):
+        """Download an LSUN category dataset.
+        
+        Args:
+            category: LSUN category to download
+            data_dir: Directory to save the data
+        """
+        if category not in DatasetManager.LSUN_CATEGORIES:
+            valid_categories = ', '.join(DatasetManager.LSUN_CATEGORIES)
+            raise ValueError(f"Invalid LSUN category: '{category}'. Valid categories are: {valid_categories}")
+        
+        # Create data directory if it doesn't exist
+        data_dir = os.path.abspath(data_dir)
+        os.makedirs(data_dir, exist_ok=True)
+        
+        # Check if dataset already exists
+        lsun_dir = os.path.join(data_dir, f"{category}_train_lmdb")
+        if os.path.exists(lsun_dir):
+            print(f"LSUN {category} dataset already exists at {lsun_dir}")
+            return
+        
+        print(f"Downloading LSUN {category} dataset to {data_dir}...")
+        
+        # Clone the LSUN tools repository if it doesn't exist
+        lsun_tools_dir = os.path.join(data_dir, 'lsun_tools')
+        if not os.path.exists(lsun_tools_dir):
+            clone_cmd = f"git clone https://github.com/fyu/lsun.git {lsun_tools_dir}"
+            subprocess.run(clone_cmd, shell=True, check=True)
+        
+        # Use download.py from LSUN tools
+        download_script = os.path.join(lsun_tools_dir, 'download.py')
+        cmd = f"cd {data_dir} && python {download_script} -c {category}"
+        
+        subprocess.run(cmd, shell=True, check=True)
+        
+        print(f"LSUN {category} dataset downloaded successfully!")
+    
+    @staticmethod
+    def get_dataset(
+        dataset_name_or_path: str,
+        image_size: int = 256,
+        train: bool = True,
+        download: bool = True
+    ) -> Dataset:
+        """Get a dataset by name or path.
+        
+        Args:
+            dataset_name_or_path: Name of standard dataset or path to custom dataset
+            image_size: Target image size for resizing
+            train: Whether to use training split (for standard datasets)
+            download: Whether to download standard datasets if not present
+            
+        Returns:
+            Dataset object
+        """
+        dataset_name = dataset_name_or_path.lower()
+        
+        # Define transforms based on image size
+        if dataset_name in ['mnist', 'fashion_mnist']:
+            # Grayscale datasets
+            transform = transforms.Compose([
+                transforms.Resize((image_size, image_size)),
+                transforms.ToTensor(),
+                # Add channel dimension and repeat to make 3 channels (RGB)
+                transforms.Lambda(lambda x: x.repeat(3, 1, 1)),
+                transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])
+            ])
+        else:
+            # RGB datasets
+            transform = transforms.Compose([
+                transforms.Resize((image_size, image_size)),
+                transforms.ToTensor(),
+                transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])
+            ])
+        
+        # Load standard dataset if name matches
+        if dataset_name == 'cifar10':
+            return datasets.CIFAR10(root='./data', train=train, download=download, transform=transform)
+        elif dataset_name == 'cifar100':
+            return datasets.CIFAR100(root='./data', train=train, download=download, transform=transform)
+        elif dataset_name == 'mnist':
+            return datasets.MNIST(root='./data', train=train, download=download, transform=transform)
+        elif dataset_name == 'fashion_mnist':
+            return datasets.FashionMNIST(root='./data', train=train, download=download, transform=transform)
+        elif dataset_name == 'svhn':
+            split = 'train' if train else 'test'
+            return datasets.SVHN(root='./data', split=split, download=download, transform=transform)
+        elif dataset_name == 'stl10':
+            split = 'train' if train else 'test'
+            return datasets.STL10(root='./data', split=split, download=download, transform=transform)
+        elif dataset_name.startswith('lsun-'):
+            # LSUN has different categories like lsun-bedroom, lsun-church, etc.
+            category = dataset_name.split('-')[1]
+            
+            # Ensure the category is valid
+            if category not in DatasetManager.LSUN_CATEGORIES:
+                valid_categories = ', '.join(DatasetManager.LSUN_CATEGORIES)
+                raise ValueError(f"Invalid LSUN category: '{category}'. Valid categories are: {valid_categories}")
+            
+            # Download the dataset if needed
+            if download:
+                try:
+                    DatasetManager.download_lsun(category)
+                except Exception as e:
+                    print(f"Error downloading LSUN {category} dataset: {e}")
+                    print("Continuing with existing data if available...")
+                
+            # The LSUN dataset takes a list of categories but we need to pass a string for a single category
+            split = 'train' if train else 'val'
+            return datasets.LSUN(root='./data', classes=[f"{category}_{split}"], transform=transform)
+        
+        # If not a standard dataset, assume it's a path to a custom dataset
+        return CustomImageDataset(image_dir=dataset_name_or_path, image_size=image_size)
+    
+    @staticmethod
+    def is_standard_dataset(dataset_name: str) -> bool:
+        """Check if a dataset name is a standard dataset.
+        
+        Args:
+            dataset_name: Name of dataset to check
+            
+        Returns:
+            True if dataset is standard, False otherwise
+        """
+        dataset_name = dataset_name.lower()
+        
+        # Handle LSUN categories
+        if dataset_name.startswith('lsun-'):
+            category = dataset_name.split('-')[1]
+            return category in DatasetManager.LSUN_CATEGORIES
+            
+        return dataset_name in DatasetManager.STANDARD_DATASETS
+    
+    @staticmethod
+    def list_available_datasets() -> List[str]:
+        """List all available standard datasets.
+        
+        Returns:
+            List of available standard dataset names
+        """
+        lsun_datasets = [f"lsun-{category}" for category in DatasetManager.LSUN_CATEGORIES]
+        return DatasetManager.STANDARD_DATASETS + lsun_datasets
+
 
 class CustomImageDataset(Dataset):
     """Custom dataset for loading images for diffusion model fine-tuning."""
@@ -97,7 +260,7 @@ class DiffusionTrainer:
     
     def prepare_dataset(
         self, 
-        dataset_path: str,
+        dataset_name_or_path: str,
         batch_size: int = 8,
         image_size: int = None,
         num_workers: int = 4
@@ -105,7 +268,7 @@ class DiffusionTrainer:
         """Prepare dataset for fine-tuning.
         
         Args:
-            dataset_path: Path to the dataset
+            dataset_name_or_path: Name of standard dataset or path to custom dataset
             batch_size: Batch size for training
             image_size: Target image size (default: from model config)
             num_workers: Number of workers for data loading
@@ -116,11 +279,14 @@ class DiffusionTrainer:
         if image_size is None:
             image_size = self.model_loader.unet_config.sample_size
         
-        print(f"Preparing dataset from {dataset_path} with image size {image_size}...")
+        is_standard = DatasetManager.is_standard_dataset(dataset_name_or_path)
+        dataset_type = "standard" if is_standard else "custom"
+        
+        print(f"Preparing {dataset_type} dataset '{dataset_name_or_path}' with image size {image_size}...")
         
         # Create dataset
-        dataset = CustomImageDataset(
-            image_dir=dataset_path,
+        dataset = DatasetManager.get_dataset(
+            dataset_name_or_path=dataset_name_or_path,
             image_size=image_size
         )
         
@@ -177,8 +343,14 @@ class DiffusionTrainer:
             epoch_losses = []
             
             for step, batch in enumerate(dataloader):
-                # Move batch to device
-                clean_images = batch.to(self.device)
+                # Handle different dataset formats
+                if isinstance(batch, (list, tuple)) and len(batch) == 2:
+                    # Standard datasets return (image, label) pairs
+                    clean_images = batch[0].to(self.device)
+                else:
+                    # Our custom dataset returns just images
+                    clean_images = batch.to(self.device)
+                
                 batch_size = clean_images.shape[0]
                 
                 # Sample noise
@@ -274,12 +446,19 @@ def example_fine_tuning_script():
         output_dir="fine_tuned_models/my_custom_model"
     )
     
-    # Prepare dataset
+    # Use CIFAR-10 as an example of a standard dataset
     dataloader = trainer.prepare_dataset(
-        dataset_path="path/to/your/images",
+        dataset_name_or_path="cifar10",
         batch_size=8,
         num_workers=4
     )
+    
+    # Or use a custom dataset
+    # dataloader = trainer.prepare_dataset(
+    #     dataset_name_or_path="path/to/your/images",
+    #     batch_size=8,
+    #     num_workers=4
+    # )
     
     # Train the model
     losses = trainer.train(

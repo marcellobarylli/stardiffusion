@@ -6,13 +6,14 @@ A modular framework for generating images with diffusion models and fine-tuning 
 
 - Image generation using pre-trained diffusion models from Hugging Face
 - Fine-tuning capabilities for customizing models on your own datasets
+- Support for standard datasets (CIFAR-10, MNIST, etc.) and custom image directories
 - Multi-GPU support via PyTorch DataParallel
 - Command-line interface for easy use
 - Modular design for extensibility
 
 ## Project Structure
 
-- `UNetFinetune.py`: Core classes for diffusion model loading, processing, and visualization
+- `DiffusionCore.py`: Core classes for diffusion model loading, processing, and visualization
 - `DiffusionFineTuner.py`: Classes and utilities for fine-tuning diffusion models
 - `main.py`: Command-line interface and entry point for the application
 
@@ -57,15 +58,27 @@ Options:
 
 ### Fine-tuning
 
-To fine-tune a diffusion model on your own dataset:
+To fine-tune a diffusion model on a dataset:
 
 ```bash
-python main.py finetune --model_id="google/ddpm-celebahq-256" --dataset_path="path/to/images" --output_dir="fine_tuned_model" --num_epochs=20
+python main.py finetune --model_id="google/ddpm-celebahq-256" --dataset="cifar10" --output_dir="fine_tuned_model" --num_epochs=20
+```
+
+To fine-tune on your own custom images:
+
+```bash
+python main.py finetune --model_id="google/ddpm-celebahq-256" --dataset="path/to/images" --output_dir="fine_tuned_model" --num_epochs=20
+```
+
+To see the list of available standard datasets:
+
+```bash
+python main.py list_datasets
 ```
 
 Options:
 - `--model_id`: Hugging Face model ID to fine-tune (default: "google/ddpm-celebahq-256")
-- `--dataset_path`: Path to the dataset for fine-tuning (required)
+- `--dataset`: Dataset to use for fine-tuning (can be a standard dataset name like 'cifar10' or a path to custom images)
 - `--output_dir`: Directory to save the fine-tuned model (default: "fine_tuned_model")
 - `--num_epochs`: Number of training epochs (default: 10)
 - `--batch_size`: Batch size for training (default: 8)
@@ -92,9 +105,20 @@ Options:
 - `--output_dir`: Directory to save generated images (default: "output")
 - `--gpus`: Comma-separated list of GPU IDs to use (default: "0,1")
 
-## Dataset Format
+## Supported Datasets
 
-For fine-tuning, organize your images in a directory structure. The framework will recursively find all images with the following extensions: `.jpg`, `.jpeg`, `.png`, `.bmp`.
+### Standard Datasets
+The framework supports the following standard datasets:
+- CIFAR-10 (`cifar10`)
+- CIFAR-100 (`cifar100`)
+- MNIST (`mnist`) 
+- Fashion-MNIST (`fashion_mnist`)
+- SVHN (`svhn`)
+- STL10 (`stl10`)
+- LSUN (`lsun-bedroom`, `lsun-church`, etc.)
+
+### Custom Datasets
+For fine-tuning on your own images, organize them in a directory structure. The framework will recursively find all images with the following extensions: `.jpg`, `.jpeg`, `.png`, `.bmp`.
 
 Example dataset structure:
 ```
@@ -113,7 +137,7 @@ dataset/
 
 ### Basic Generation
 ```python
-from UNetFinetune import DiffusionConfig, DiffusionModelLoader, DiffusionProcessor, DiffusionVisualizer
+from DiffusionCore import DiffusionConfig, DiffusionModelLoader, DiffusionProcessor, DiffusionVisualizer
 
 # Initialize configuration
 config = DiffusionConfig(model_id="google/ddpm-celebahq-256", visible_gpus="0,1")
@@ -132,9 +156,9 @@ visualizer.visualize_progression(intermediates)
 visualizer.visualize_final_image(final_image)
 ```
 
-### Fine-tuning Example
+### Fine-tuning with CIFAR-10
 ```python
-from UNetFinetune import DiffusionConfig, DiffusionModelLoader
+from DiffusionCore import DiffusionConfig, DiffusionModelLoader
 from DiffusionFineTuner import DiffusionTrainer
 
 # Initialize configuration
@@ -145,10 +169,32 @@ model_loader = DiffusionModelLoader(config)
 model_loader.load_model()
 
 # Create trainer
-trainer = DiffusionTrainer(model_loader=model_loader, config=config, output_dir="my_fine_tuned_model")
+trainer = DiffusionTrainer(model_loader=model_loader, config=config, output_dir="cifar10_model")
 
-# Prepare dataset
-dataloader = trainer.prepare_dataset(dataset_path="path/to/images", batch_size=8)
+# Prepare CIFAR-10 dataset
+dataloader = trainer.prepare_dataset(dataset_name_or_path="cifar10", batch_size=8)
+
+# Train the model
+losses = trainer.train(dataloader=dataloader, num_epochs=20, learning_rate=1e-5)
+```
+
+### Fine-tuning with Custom Images
+```python
+from DiffusionCore import DiffusionConfig, DiffusionModelLoader
+from DiffusionFineTuner import DiffusionTrainer
+
+# Initialize configuration
+config = DiffusionConfig(model_id="google/ddpm-celebahq-256", visible_gpus="0,1")
+
+# Load the model
+model_loader = DiffusionModelLoader(config)
+model_loader.load_model()
+
+# Create trainer
+trainer = DiffusionTrainer(model_loader=model_loader, config=config, output_dir="custom_model")
+
+# Prepare custom dataset
+dataloader = trainer.prepare_dataset(dataset_name_or_path="path/to/images", batch_size=8)
 
 # Train the model
 losses = trainer.train(dataloader=dataloader, num_epochs=20, learning_rate=1e-5)
