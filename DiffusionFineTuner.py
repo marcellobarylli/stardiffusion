@@ -12,6 +12,8 @@ import numpy as np
 from PIL import Image
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
+from datetime import datetime
+import types
 
 # Import from our core module
 from DiffusionCore import DiffusionConfig, DiffusionModelLoader
@@ -252,11 +254,29 @@ class DiffusionTrainer:
         # Create output directory if it doesn't exist
         os.makedirs(output_dir, exist_ok=True)
         
-        # Get model
+        # Get model from loader
         self.model = self.model_loader.unet
         
-        # Create noise scheduler for training
+        # Set up noise scheduler
         self.noise_scheduler = DDPMScheduler.from_pretrained(config.model_id)
+        
+        # Log device information for training
+        print(f"Training device: {self.device}")
+        if hasattr(self.config, 'use_data_parallel') and self.config.use_data_parallel:
+            print(f"Multi-GPU training enabled with {len(self.config.device_ids)} GPUs")
+            print(f"Effective batch size will be {self.config.batch_size * len(self.config.device_ids)}")
+            for i, gpu_id in enumerate(self.config.device_ids):
+                print(f"  Device {i}: GPU {gpu_id} (CUDA index)")
+                
+        # Log training setup
+        print(f"Model has {sum(p.numel() for p in self.model.parameters())} parameters")
+        if hasattr(self.model, "module"):
+            # It's wrapped in DataParallel
+            print(f"Model architecture: {type(self.model.module).__name__}")
+        else:
+            print(f"Model architecture: {type(self.model).__name__}")
+        
+        print(f"Output directory for checkpoints: {self.output_dir}")
     
     def prepare_dataset(
         self, 
@@ -321,17 +341,35 @@ class DiffusionTrainer:
             gradient_accumulation_steps: Number of steps to accumulate gradients
             mixed_precision: Whether to use mixed precision training
         """
-        # Get model (unwrap from DataParallel if needed)
+        # Get model (unwrap from DataParallel if needed for optimizer setup)
         model = self.model.module if hasattr(self.model, "module") else self.model
         
         # Setup optimizer
         optimizer = optim.AdamW(model.parameters(), lr=learning_rate)
         
-        # Setup scaler for mixed precision training
-        scaler = torch.cuda.amp.GradScaler() if mixed_precision and torch.cuda.is_available() else None
+        # Setup scaler for mixed precision training (with new API)
+        if mixed_precision and torch.cuda.is_available():
+            scaler = torch.amp.GradScaler('cuda')
+            print(f"Using mixed precision training with automatic mixed precision")
+        else:
+            scaler = None
         
-        # Training loop
-        print(f"Starting fine-tuning for {num_epochs} epochs with lr={learning_rate}...")
+        # Calculate effective batch size
+        is_distributed = hasattr(self.model, "module")
+        num_gpus = len(self.config.device_ids) if hasattr(self.config, 'device_ids') else 1
+        effective_batch_size = dataloader.batch_size * gradient_accumulation_steps
+        if is_distributed:
+            effective_batch_size *= num_gpus
+        
+        print(f"Starting fine-tuning for {num_epochs} epochs with:")
+        print(f" - Learning rate: {learning_rate}")
+        print(f" - Batch size per GPU: {dataloader.batch_size}")
+        print(f" - Gradient accumulation steps: {gradient_accumulation_steps}")
+        print(f" - Effective batch size: {effective_batch_size}")
+        print(f" - Number of GPUs: {num_gpus}")
+        print(f" - Mixed precision: {mixed_precision}")
+        print(f" - Total training samples: {len(dataloader.dataset)}")
+        print(f" - Steps per epoch: {len(dataloader)}")
         
         global_step = 0
         losses = []
@@ -368,10 +406,48 @@ class DiffusionTrainer:
                 noisy_images = self.noise_scheduler.add_noise(clean_images, noise, timesteps)
                 
                 # Predict the noise residual
-                with torch.cuda.amp.autocast(enabled=mixed_precision and torch.cuda.is_available()):
-                    noise_pred = model(noisy_images, timesteps).sample
-                    loss = nn.functional.mse_loss(noise_pred, noise)
-                    loss = loss / gradient_accumulation_steps
+                with torch.amp.autocast(device_type='cuda', enabled=mixed_precision and torch.cuda.is_available()):
+                    # For DataParallel models, we need to be extra careful with the output
+                    try:
+                        model_output = self.model(noisy_images, timesteps)
+                        
+                        # Handle the various output formats
+                        if hasattr(model_output, 'sample'):
+                            noise_pred = model_output.sample
+                        else:
+                            # Handle generator case
+                            if isinstance(model_output, types.GeneratorType):
+                                print("Converting generator to list...")
+                                # Convert generator to list and use the first element
+                                output_list = list(model_output)
+                                if output_list:
+                                    noise_pred = output_list[0]
+                                else:
+                                    print("Generator is empty, skipping batch")
+                                    continue
+                            # Handle tuple/list case
+                            elif isinstance(model_output, (tuple, list)) and len(model_output) > 0:
+                                noise_pred = model_output[0]
+                            # Fallback
+                            else:
+                                noise_pred = model_output
+                        
+                        # Final check that noise_pred is a tensor
+                        if not isinstance(noise_pred, torch.Tensor):
+                            print(f"Warning: noise_pred is still not a tensor but a {type(noise_pred)}")
+                            # Skip this batch if we can't get a tensor
+                            print("Skipping batch - cannot convert to tensor")
+                            continue
+                            
+                        # Now calculate the loss
+                        loss = nn.functional.mse_loss(noise_pred, noise)
+                        loss = loss / gradient_accumulation_steps
+                    except Exception as e:
+                        print(f"Error in forward pass or loss calculation: {e}")
+                        import traceback
+                        traceback.print_exc()
+                        # Skip this batch
+                        continue
                 
                 # Accumulate gradients
                 if scaler is not None:
@@ -399,12 +475,16 @@ class DiffusionTrainer:
             losses.append(avg_epoch_loss)
             print(f"Epoch {epoch+1}/{num_epochs} - Average loss: {avg_epoch_loss:.6f}")
             
-            # Save checkpoint
-            if (epoch + 1) % save_interval == 0:
-                self.save_model(os.path.join(self.output_dir, f"checkpoint-{epoch+1}"))
+            # Save checkpoint at specified intervals
+            if (epoch + 1) % save_interval == 0 or epoch == num_epochs - 1:
+                save_dir = os.path.join(self.output_dir, f"checkpoint-epoch-{epoch+1}")
+                print(f"Saving model checkpoint to {save_dir}")
+                self.save_model(save_dir)
         
         # Save final model
-        self.save_model(os.path.join(self.output_dir, "final_model"))
+        final_dir = os.path.join(self.output_dir, "final")
+        print(f"Saving final model to {final_dir}")
+        self.save_model(final_dir)
         
         return losses
     
@@ -414,16 +494,28 @@ class DiffusionTrainer:
         Args:
             output_dir: Directory to save the model
         """
-        # Create directory if it doesn't exist
         os.makedirs(output_dir, exist_ok=True)
         
-        # Unwrap from DataParallel if needed
-        model = self.model.module if hasattr(self.model, "module") else self.model
+        # Check if model is wrapped in DataParallel and unwrap if needed
+        model_to_save = self.model.module if hasattr(self.model, "module") else self.model
         
-        # Save the model
-        model.save_pretrained(output_dir)
+        # Save UNet
+        print(f"Saving UNet weights...")
+        model_to_save.save_pretrained(output_dir)
         
-        print(f"Model saved to {output_dir}")
+        # Save scheduler configuration
+        print(f"Saving scheduler configuration...")
+        self.noise_scheduler.save_pretrained(output_dir)
+        
+        # Save a README with training details
+        with open(os.path.join(output_dir, "training_info.txt"), "w") as f:
+            f.write(f"Fine-tuned from: {self.config.model_id}\n")
+            f.write(f"Training device: {self.device}\n")
+            if hasattr(self.config, 'use_data_parallel') and self.config.use_data_parallel:
+                f.write(f"Trained on GPUs: {self.config.visible_gpus}\n")
+            f.write(f"Training time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            
+        print(f"Model successfully saved to {output_dir}")
 
 
 def example_fine_tuning_script():

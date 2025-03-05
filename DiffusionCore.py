@@ -28,11 +28,24 @@ class DiffusionConfig:
         
         # Set device
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.use_data_parallel = torch.cuda.device_count() > 1
+        
+        # Parse the visible GPUs and create device list
+        if torch.cuda.is_available():
+            self.gpu_ids = [int(x) for x in self.visible_gpus.split(",")]
+            print(f"Requested GPUs: {self.gpu_ids}")
+            # Reset device indices after setting CUDA_VISIBLE_DEVICES
+            self.device_ids = list(range(len(self.gpu_ids)))
+            self.use_data_parallel = len(self.device_ids) > 1
+        else:
+            self.gpu_ids = []
+            self.device_ids = []
+            self.use_data_parallel = False
         
         # Print device info
         print(f"Using device: {self.device}")
-        print(f"Available GPUs: {torch.cuda.device_count()}")
+        print(f"Available GPU count: {torch.cuda.device_count()}")
+        if self.use_data_parallel:
+            print(f"Will use DataParallel with device IDs: {self.device_ids}")
 
 
 class DiffusionModelLoader:
@@ -57,8 +70,8 @@ class DiffusionModelLoader:
         
         # Wrap model with DataParallel if multiple GPUs are available
         if self.config.use_data_parallel:
-            print(f"Using {torch.cuda.device_count()} GPUs!")
-            self.unet = torch.nn.DataParallel(self.unet)
+            print(f"Initializing DataParallel with {len(self.config.device_ids)} GPUs")
+            self.unet = torch.nn.DataParallel(self.unet, device_ids=self.config.device_ids)
         
         print(f"Model loaded: {self.config.model_id}")
         print(f"Model parameters: {sum(p.numel() for p in self.unet.parameters())}")
