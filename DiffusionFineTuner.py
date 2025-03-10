@@ -564,4 +564,37 @@ def example_fine_tuning_script():
     
     
 if __name__ == "__main__":
-    example_fine_tuning_script() 
+    example_fine_tuning_script()
+
+# Initialize configuration
+config = DiffusionConfig(
+    model_id="google/ddpm-ema-church-256",  # or any other model
+    visible_gpus="2",  # use your preferred GPU
+    num_inference_steps=100
+)
+
+# Load the model
+model_loader = DiffusionModelLoader(config)
+model_loader.load_model()
+
+# Create trainer
+trainer = DiffusionTrainer(
+    model_loader=model_loader,
+    config=config,
+    output_dir="fine_tuned_models/starcraft_maps"
+)
+
+# Prepare dataset with your StarCraft maps
+dataloader = trainer.prepare_dataset(
+    dataset_name_or_path="data/StarCraft_Map_Dataset",
+    batch_size=8,
+    num_workers=4
+)
+
+# Train the model
+losses = trainer.train(
+    dataloader=dataloader,
+    num_epochs=30,
+    learning_rate=1e-5,
+    save_interval=5
+) 
