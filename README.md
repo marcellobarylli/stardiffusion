@@ -1,4 +1,4 @@
-# HuggingDiffusion
+# stardiffusion
 
 A modular framework for generating images with diffusion models and fine-tuning them on custom datasets.
 
