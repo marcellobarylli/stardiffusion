@@ -1,0 +1,96 @@
+[33mcommit 4608064c42e324e0ed31ce2f55715b3c1fc26372[m[33m ([m[1;36mHEAD -> [m[1;32mmain[m[33m)[m
+Author: Marcello <marcello.barylli@gmail.com>
+Date:   Tue Mar 11 10:46:18 2025 +0000
+
+    testing coordconv performance and spatial awareness
+
+ CoordDiffusion.py                                                    | 326 [31m-----------------[m
+ DiffusionCore.py                                                     | 265 [31m--------------[m
+ DiffusionFineTuner.py                                                | 600 [31m-------------------------------[m
+ README.md                                                            | 233 [32m++++[m[31m--------[m
+ __pycache__/CoordConv.cpython-310.pyc                                | Bin [31m6159[m -> [32m0[m bytes
+ __pycache__/DiffusionCore.cpython-310.pyc                            | Bin [31m7944[m -> [32m0[m bytes
+ __pycache__/DiffusionFineTuner.cpython-310.pyc                       | Bin [31m15394[m -> [32m0[m bytes
+ __pycache__/UNetFinetune.cpython-310.pyc                             | Bin [31m9056[m -> [32m0[m bytes
+ configs/__init__.py                                                  |   0
+ diffusion_progression.png                                            | Bin [31m1337079[m -> [32m0[m bytes
+ fine_tuned_models/starcraft_maps/checkpoint-epoch-10/config.json     |  53 [31m---[m
+ .../starcraft_maps/checkpoint-epoch-10/scheduler_config.json         |  19 [31m-[m
+ .../starcraft_maps/checkpoint-epoch-10/training_info.txt             |   3 [31m-[m
+ fine_tuned_models/starcraft_maps/checkpoint-epoch-15/config.json     |  53 [31m---[m
+ .../starcraft_maps/checkpoint-epoch-15/scheduler_config.json         |  19 [31m-[m
+ .../starcraft_maps/checkpoint-epoch-15/training_info.txt             |   3 [31m-[m
+ fine_tuned_models/starcraft_maps/checkpoint-epoch-20/config.json     |  53 [31m---[m
+ .../starcraft_maps/checkpoint-epoch-20/scheduler_config.json         |  19 [31m-[m
+ .../starcraft_maps/checkpoint-epoch-20/training_info.txt             |   3 [31m-[m
+ fine_tuned_models/starcraft_maps/checkpoint-epoch-25/config.json     |  53 [31m---[m
+ .../starcraft_maps/checkpoint-epoch-25/scheduler_config.json         |  19 [31m-[m
+ .../starcraft_maps/checkpoint-epoch-25/training_info.txt             |   3 [31m-[m
+ fine_tuned_models/starcraft_maps/checkpoint-epoch-30/config.json     |  53 [31m---[m
+ .../starcraft_maps/checkpoint-epoch-30/scheduler_config.json         |  19 [31m-[m
+ .../starcraft_maps/checkpoint-epoch-30/training_info.txt             |   3 [31m-[m
+ fine_tuned_models/starcraft_maps/checkpoint-epoch-5/config.json      |  53 [31m---[m
+ .../starcraft_maps/checkpoint-epoch-5/scheduler_config.json          |  19 [31m-[m
+ .../starcraft_maps/checkpoint-epoch-5/training_info.txt              |   3 [31m-[m
+ fine_tuned_models/starcraft_maps/final/config.json                   |  53 [31m---[m
+ fine_tuned_models/starcraft_maps/final/scheduler_config.json         |  19 [31m-[m
+ fine_tuned_models/starcraft_maps/final/training_info.txt             |   3 [31m-[m
+ finetune_starcraft.py                                                |  53 [31m---[m
+ generate_starcraft_maps.py                                           | 130 [31m-------[m
+ generated_image.png                                                  | Bin [31m237430[m -> [32m0[m bytes
+ generated_starcraft_maps/individual_seed123/map_1.png                | Bin [31m109758[m -> [32m0[m bytes
+ generated_starcraft_maps/individual_seed123/map_10.png               | Bin [31m121474[m -> [32m0[m bytes
+ generated_starcraft_maps/individual_seed123/map_11.png               | Bin [31m84930[m -> [32m0[m bytes
+ generated_starcraft_maps/individual_seed123/map_12.png               | Bin [31m123181[m -> [32m0[m bytes
+ generated_starcraft_maps/individual_seed123/map_13.png               | Bin [31m128140[m -> [32m0[m bytes
+ generated_starcraft_maps/individual_seed123/map_14.png               | Bin [31m126624[m -> [32m0[m bytes
+ generated_starcraft_maps/individual_seed123/map_15.png               | Bin [31m140498[m -> [32m0[m bytes
+ generated_starcraft_maps/individual_seed123/map_16.png               | Bin [31m123037[m -> [32m0[m bytes
+ generated_starcraft_maps/individual_seed123/map_17.png               | Bin [31m120466[m -> [32m0[m bytes
+ generated_starcraft_maps/individual_seed123/map_18.png               | Bin [31m122463[m -> [32m0[m bytes
+ generated_starcraft_maps/individual_seed123/map_19.png               | Bin [31m98514[m -> [32m0[m bytes
+ generated_starcraft_maps/individual_seed123/map_2.png                | Bin [31m118550[m -> [32m0[m bytes
+ generated_starcraft_maps/individual_seed123/map_20.png               | Bin [31m125075[m -> [32m0[m bytes
+ generated_starcraft_maps/individual_seed123/map_21.png               | Bin [31m107161[m -> [32m0[m bytes
+ generated_starcraft_maps/individual_seed123/map_22.png               | Bin [31m115044[m -> [32m0[m bytes
+ generated_starcraft_maps/individual_seed123/map_23.png               | Bin [31m129213[m -> [32m0[m bytes
+ generated_starcraft_maps/individual_seed123/map_24.png               | Bin [31m136099[m -> [32m0[m bytes
+ generated_starcraft_maps/individual_seed123/map_25.png               | Bin [31m123458[m -> [32m0[m bytes
+ generated_starcraft_maps/individual_seed123/map_26.png               | Bin [31m118525[m -> [32m0[m bytes
+ generated_starcraft_maps/individual_seed123/map_27.png               | Bin [31m137088[m -> [32m0[m bytes
+ generated_starcraft_maps/individual_seed123/map_28.png               | Bin [31m116948[m -> [32m0[m bytes
+ generated_starcraft_maps/individual_seed123/map_29.png               | Bin [31m115906[m -> [32m0[m bytes
+ generated_starcraft_maps/individual_seed123/map_3.png                | Bin [31m116699[m -> [32m0[m bytes
+ generated_starcraft_maps/individual_seed123/map_30.png               | Bin [31m142552[m -> [32m0[m bytes
+ generated_starcraft_maps/individual_seed123/map_31.png               | Bin [31m102761[m -> [32m0[m bytes
+ generated_starcraft_maps/individual_seed123/map_32.png               | Bin [31m100999[m -> [32m0[m bytes
+ generated_starcraft_maps/individual_seed123/map_4.png                | Bin [31m116820[m -> [32m0[m bytes
+ generated_starcraft_maps/individual_seed123/map_5.png                | Bin [31m113370[m -> [32m0[m bytes
+ generated_starcraft_maps/individual_seed123/map_6.png                | Bin [31m119374[m -> [32m0[m bytes
+ generated_starcraft_maps/individual_seed123/map_7.png                | Bin [31m104809[m -> [32m0[m bytes
+ generated_starcraft_maps/individual_seed123/map_8.png                | Bin [31m110459[m -> [32m0[m bytes
+ generated_starcraft_maps/individual_seed123/map_9.png                | Bin [31m108454[m -> [32m0[m bytes
+ generated_starcraft_maps/progression_seed123.png                     | Bin [31m911498[m -> [32m0[m bytes
+ generated_starcraft_maps/starcraft_maps_seed123.png                  | Bin [31m298674[m -> [32m0[m bytes
+ generated_starcraft_maps/starcraft_maps_seed42.png                   | Bin [31m306683[m -> [32m0[m bytes
+ inference/__init__.py                                                |   0
+ inference/generate_starcraft_maps.py                                 | 136 [32m+++++++[m
+ main.py                                                              | 277 [32m+++++++[m[31m-------[m
+ models/__init__.py                                                   |   0
+ models/coord_conv/__init__.py                                        |   0
+ README_CoordConv.md => models/coord_conv/docs/README_CoordConv.md    |  24 [32m+[m[31m-[m
+ models/coord_conv/layers.py                                          |  74 [32m++++[m
+ CoordConv.py => models/coord_conv/unet.py                            |  75 [32m+[m[31m---[m
+ models/diffusion/__init__.py                                         |   0
+ models/diffusion/coord.py                                            | 289 [32m+++++++++++++++[m
+ models/diffusion/core.py                                             | 384 [32m++++++++++++++++++++[m
+ tests/README.md                                                      | 103 [32m++++++[m
+ tests/__init__.py                                                    |   1 [32m+[m
+ tests/run_coordconv_tests.py                                         | 199 [32m++++++++++[m
+ tests/test_coordconv_performance.py                                  | 487 [32m+++++++++++++++++++++++++[m
+ tests/test_coordconv_spatial_awareness.py                            | 434 [32m++++++++++++++++++++++[m
+ training/__init__.py                                                 |   0
+ run_starcraft_coordconv.py => training/run_starcraft_coordconv.py    |  23 [32m+[m[31m-[m
+ training/trainer.py                                                  | 272 [32m++++++++++++++[m
+ utils/__init__.py                                                    |   0
+ 89 files changed, 2631 insertions(+), 2279 deletions(-)
