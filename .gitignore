@@ -2,6 +2,8 @@ data/
 fine_tuned_cifar10/
 fine_tuned_models/
 coord_fine_tuned_models/
+models/
+checkpoints/
 
 # Specific model files
 **/diffusion_pytorch_model.safetensors
