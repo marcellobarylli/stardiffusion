@@ -1,4 +1,4 @@
-# StarDiffusion
+# stardiffusion
 
 A modular implementation of diffusion models with CoordConv enhancement for spatial awareness.
 
@@ -110,9 +110,4 @@ PYTHONPATH=. python training/run_starcraft_coordconv.py --mode train --dataset_p
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## Acknowledgments
-
-- The CoordConv paper: [An Intriguing Failing of Convolutional Neural Networks and the CoordConv Solution](https://arxiv.org/abs/1807.03247)
-- Hugging Face Diffusers library 
+This project is licensed under the MIT License - see the LICENSE file for details. 
