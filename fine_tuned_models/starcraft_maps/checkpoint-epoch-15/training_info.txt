@@ -1,3 +1,0 @@
-Fine-tuned from: google/ddpm-ema-church-256
-Training device: cuda
-Training time: 2025-03-10 17:05:14
