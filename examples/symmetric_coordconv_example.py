@@ -26,7 +26,7 @@ def convert_model_example():
     symmetric_model = convert_to_symmetric_coordconv(
         model_loader.model,
         symmetry_type="vertical",  # Options: 'vertical', 'horizontal', 'both'
-        with_r=True,
+        with_r=False,
         normalize=True
     )
     
@@ -43,7 +43,7 @@ def generate_symmetric_samples():
         model_path="google/ddpm-celebahq-256",  # Can be any model path, will be converted
         num_samples=2,
         symmetry_type="vertical",
-        with_r=True,
+        with_r=False,
         output_dir="outputs/symmetric_examples/vertical"
     )
     print(f"Generated vertical symmetric samples in {vertical_output}")
@@ -53,7 +53,7 @@ def generate_symmetric_samples():
         model_path="google/ddpm-celebahq-256",  # Can be any model path, will be converted
         num_samples=2,
         symmetry_type="horizontal",
-        with_r=True,
+        with_r=False,
         output_dir="outputs/symmetric_examples/horizontal"
     )
     print(f"Generated horizontal symmetric samples in {horizontal_output}")
@@ -63,7 +63,7 @@ def generate_symmetric_samples():
         model_path="google/ddpm-celebahq-256",  # Can be any model path, will be converted
         num_samples=2,
         symmetry_type="both",
-        with_r=True,
+        with_r=False,
         output_dir="outputs/symmetric_examples/both"
     )
     print(f"Generated samples with both symmetries in {both_output}")
@@ -89,7 +89,7 @@ def compare_symmetry_types():
             model_path=model_path,
             num_samples=num_samples,
             symmetry_type=symmetry_type,
-            with_r=True,
+            with_r=False,
             output_dir=output_dir
         )
         print(f"Generated {symmetry_type} symmetric samples in {output_dir}")

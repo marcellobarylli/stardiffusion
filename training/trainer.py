@@ -14,6 +14,7 @@ import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 from datetime import datetime
 import types
+import json
 
 # Import from our core module
 from models.diffusion.core import DiffusionConfig, DiffusionModelLoader
@@ -239,7 +240,7 @@ class DiffusionTrainer:
     
     def save_model(self, output_dir: str):
         """
-        Save the fine-tuned model.
+        Save the fine-tuned model as a complete pipeline.
         
         Args:
             output_dir: Directory to save the model
@@ -250,18 +251,50 @@ class DiffusionTrainer:
         # Get the model (unwrap if it's in DataParallel)
         model_to_save = self.model.module if hasattr(self.model, "module") else self.model
         
-        # Save model
+        # Save UNet model
         model_to_save.save_pretrained(output_dir)
+        print(f"Saved UNet model to {output_dir}")
         
         # Save scheduler config
         self.noise_scheduler.save_pretrained(output_dir)
+        print(f"Saved scheduler configuration to {output_dir}")
+        
+        # Get current diffusers version
+        from diffusers import __version__ as diffusers_version
+        
+        # Create and save model_index.json to enable pipeline loading
+        model_index = {
+            "_class_name": "DDPMPipeline",
+            "_diffusers_version": diffusers_version,
+            "scheduler": {
+                "_class_name": type(self.noise_scheduler).__name__,
+                "_diffusers_version": diffusers_version,
+                "beta_end": self.noise_scheduler.config.beta_end,
+                "beta_schedule": self.noise_scheduler.config.beta_schedule,
+                "beta_start": self.noise_scheduler.config.beta_start,
+                "clip_sample": self.noise_scheduler.config.clip_sample,
+                "num_train_timesteps": self.noise_scheduler.config.num_train_timesteps,
+                "prediction_type": self.noise_scheduler.config.prediction_type,
+                "variance_type": self.noise_scheduler.config.variance_type
+            },
+            "unet": {
+                "_class_name": "UNet2DModel",
+                "_diffusers_version": diffusers_version,
+            }
+        }
+        
+        with open(os.path.join(output_dir, "model_index.json"), "w") as f:
+            json.dump(model_index, f, indent=2)
+        print(f"Saved model_index.json for pipeline loading")
         
         # Save training info
         training_info = {
             "model_id": self.config.model_id,
             "sample_size": model_to_save.config.sample_size,
             "in_channels": model_to_save.config.in_channels,
-            "trained_epochs": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            "trained_epochs": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "saved_as_pipeline": True,
+            "diffusers_version": diffusers_version
         }
         
         # Save training info
@@ -269,4 +302,4 @@ class DiffusionTrainer:
             for key, value in training_info.items():
                 f.write(f"{key}: {value}\n")
         
-        print(f"Saved model to {output_dir}") 
+        print(f"Saved complete model pipeline to {output_dir}")

@@ -26,7 +26,7 @@ def parse_args():
     # Generate command
     generate_parser = subparsers.add_parser("generate", help="Generate images with a diffusion model")
     generate_parser.add_argument(
-        "--model_id", type=str, default="google/ddpm-celebahq-256",
+        "--model_id", type=str, default="google/ddpm-celebahq-256", # alternative model: google/ddpm-ema-church-256 
         help="Hugging Face model ID of the diffusion model"
     )
     generate_parser.add_argument(

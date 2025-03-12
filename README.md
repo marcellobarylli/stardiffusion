@@ -1,113 +1,48 @@
-# stardiffusion
+# StarCraft Map Diffusion Project
 
-A modular implementation of diffusion models with CoordConv enhancement for spatial awareness.
-
-## Overview
-
-StarDiffusion is a project that enhances diffusion models with spatial awareness through CoordConv layers. It allows for the generation of images with better spatial relationships, particularly useful for structured content like game maps, layouts, and structured images.
+This project fine-tunes diffusion models to generate StarCraft-style maps.
 
 ## Project Structure
 
-```
-stardiffusion-new/
-├── models/                  # Model implementations
-│   ├── coord_conv/          # CoordConv implementation
-│   │   ├── layers.py        # CoordConv layer implementation
-│   │   └── unet.py          # UNet with CoordConv
-│   └── diffusion/           # Diffusion model implementations
-│       ├── core.py          # Core diffusion functionality
-│       └── coord.py         # CoordConv diffusion extensions
-├── training/                # Training modules
-│   ├── trainer.py           # Diffusion model trainer
-│   ├── finetune_starcraft.py
-│   └── run_starcraft_coordconv.py
-├── inference/               # Inference modules
-│   └── generate_starcraft_maps.py
-├── data/                    # Data handling
-│   ├── datasets/            # Dataset implementations
-│   └── preprocessing/       # Data preprocessing
-├── utils/                   # Utility functions
-├── configs/                 # Configuration files
-├── checkpoints/             # Model checkpoints
-├── outputs/                 # Generated outputs
-├── main.py                  # Main entry point
-└── requirements.txt         # Dependencies
-```
+- `training/`: Scripts for training and fine-tuning models
+  - `train_starcraft.py`: Fine-tunes a diffusion model on the StarCraft map dataset
+  - `save_model_as_pipeline.py`: Utility to convert models to pipeline format
+  
+- `generating/`: Scripts for generating samples from trained models
+  - `sample_components.py`: Main script for generating samples (component-based approach)
+  - `sample_starcraft.py`: Legacy sample generation script (pipeline-based approach)
+  - `generate_starcraft_maps.py`: Legacy batch generation script
 
-## Key Features
+- `models/`: Model implementations and utilities
+  - `diffusion/`: Core diffusion model code
+  - `coord_conv/`: CoordConv implementation
 
-- **CoordConv Integration**: Adds spatial awareness to diffusion models based on the [CoordConv paper](https://arxiv.org/abs/1807.03247)
-- **Modular Design**: Separates models, training, and inference for better code organization
-- **Fine-tuning Support**: Built-in support for fine-tuning on custom datasets
-- **Visualization Tools**: Utilities to visualize diffusion progression
+- `data/`: Datasets and data processing utilities
+  - `StarCraft_Map_Dataset/`: Dataset of StarCraft maps
 
 ## Getting Started
 
-### Installation
+### Fine-tuning a Model
+
+To fine-tune a diffusion model on StarCraft maps:
 
 ```bash
-# Clone the repository
-git clone https://github.com/yourusername/stardiffusion-new.git
-cd stardiffusion-new
-
-# Install dependencies
-pip install -r requirements.txt
+python training/train_starcraft.py --num_epochs 20 \
+  --batch_size 8 \
+  --save_interval 5 \
+  --output_dir checkpoints/starcraft_fine_tuned \
+  --learning_rate 1e-5 \
+  --mixed_precision
 ```
 
-### Running Scripts
+### Generating Samples
 
-All scripts need to be run with the Python path set to the project root:
+To generate samples from a fine-tuned model:
 
 ```bash
-# When running the main script
-PYTHONPATH=. python main.py [arguments]
-
-# When running module scripts
-PYTHONPATH=. python training/run_starcraft_coordconv.py [arguments]
-PYTHONPATH=. python inference/generate_starcraft_maps.py [arguments]
+python generating/sample_components.py \
+  --model_path checkpoints/starcraft_fine_tuned/final \
+  --output_dir outputs/starcraft_samples \
+  --num_samples 5 \
+  --num_steps 100
 ```
-
-### Basic Usage
-
-#### Generate Images with a Pretrained Model
-
-```bash
-PYTHONPATH=. python main.py generate --model_id google/ddpm-celebahq-256 --output_dir outputs/celebahq
-```
-
-#### Fine-tune a Model on a Custom Dataset
-
-```bash
-PYTHONPATH=. python main.py finetune --model_id google/ddpm-celebahq-256 --dataset path/to/your/images --output_dir checkpoints/fine_tuned
-```
-
-#### Generate Images with a Fine-tuned Model
-
-```bash
-PYTHONPATH=. python main.py generate-finetuned --model_path checkpoints/fine_tuned/final --output_dir outputs/fine_tuned_samples
-```
-
-### CoordConv Features
-
-#### Generate StarCraft Maps
-
-```bash
-PYTHONPATH=. python inference/generate_starcraft_maps.py --model_path checkpoints/fine_tuned_models/starcraft_maps/final --num_images 10
-```
-
-#### Fine-tune with CoordConv
-
-```bash
-PYTHONPATH=. python training/run_starcraft_coordconv.py --mode train --dataset_path data/StarCraft_Map_Dataset --with_r
-```
-
-## Requirements
-
-- Python 3.8+
-- PyTorch 1.9+
-- Diffusers library
-- See `requirements.txt` for a complete list
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details. 
