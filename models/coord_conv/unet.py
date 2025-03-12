@@ -70,8 +70,8 @@ class CoordConvUNet2DModel(nn.Module):
         if augmented_sample.dtype != sample.dtype:
             augmented_sample = augmented_sample.to(sample.dtype)
         
-        # Map back to original number of channels
-        mapped_sample = self.channel_mapper(augmented_sample)
+        # Map back to original number of channels with skip connection to preserve original information
+        mapped_sample = self.channel_mapper(augmented_sample) + sample
         
         # Pass to original UNet
         return self.unet(mapped_sample, timestep, **kwargs)
