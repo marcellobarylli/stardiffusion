@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from torch.utils.data import DataLoader
 from torch.optim import Adam
+from torchvision import transforms, datasets
 
 # Add the project root to sys.path
 project_root = Path(__file__).absolute().parent.parent
@@ -29,11 +30,13 @@ def parse_args():
     
     # Data parameters
     parser.add_argument("--dataset_path", type=str, required=True,
-                      help="Path to the dataset directory with images")
+                      help="Path to the dataset directory with images or name of standard dataset")
     parser.add_argument("--output_dir", type=str, default="checkpoints/paired_symmetrizer",
                       help="Directory to save model checkpoints and training progress")
     parser.add_argument("--symmetrized_dataset_path", type=str, default=None,
                       help="Path to pre-created symmetrized dataset (if None, will create on the fly)")
+    parser.add_argument("--use_standard_dataset", action="store_true",
+                      help="Use a standard dataset from torchvision (cifar10, fashion_mnist, stl10, svhn)")
     
     # Training parameters
     parser.add_argument("--batch_size", type=int, default=8,
@@ -73,6 +76,33 @@ def parse_args():
                       help="Device to train on (default: auto-detect)")
     
     return parser.parse_args()
+
+
+def get_standard_dataset(dataset_name, image_size=256, train=True):
+    """Get a standard dataset from torchvision."""
+    # Define transforms
+    transform = transforms.Compose([
+        transforms.Resize((image_size, image_size)),
+        transforms.ToTensor(),
+        transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])  # Normalize to [-1, 1]
+    ])
+    
+    # Load dataset
+    if dataset_name == 'cifar10':
+        dataset = datasets.CIFAR10(root='./data', train=train, download=True, transform=transform)
+    elif dataset_name == 'fashion_mnist':
+        dataset = datasets.FashionMNIST(root='./data', train=train, download=True, transform=transform)
+        # Convert to RGB by repeating the channel
+        dataset.data = dataset.data.repeat(1, 1, 1, 3)
+    elif dataset_name == 'stl10':
+        dataset = datasets.STL10(root='./data', split='train' if train else 'test', download=True, transform=transform)
+    elif dataset_name == 'svhn':
+        split = 'train' if train else 'test'
+        dataset = datasets.SVHN(root='./data', split=split, download=True, transform=transform)
+    else:
+        raise ValueError(f"Unknown dataset: {dataset_name}")
+    
+    return dataset
 
 
 def train_paired_symmetrizer(
@@ -263,6 +293,64 @@ def main():
     # Dataset paths
     dataset_path = args.dataset_path
     symmetrized_dataset_path = args.symmetrized_dataset_path or os.path.join(args.output_dir, "symmetrized_dataset")
+    
+    # Handle standard dataset if specified
+    if args.use_standard_dataset:
+        logger.info(f"Loading standard dataset: {dataset_path}")
+        dataset = get_standard_dataset(dataset_path, args.image_size)
+        
+        # Create directory for original images in output directory
+        original_images_dir = os.path.join(args.output_dir, "original_images")
+        os.makedirs(original_images_dir, exist_ok=True)
+        
+        # Limit dataset size to avoid disk space issues
+        max_images = 10000  # Limit to 10000 images for faster processing
+        if len(dataset) > max_images:
+            logger.info(f"Limiting dataset to {max_images} images to avoid disk space issues")
+            indices = torch.randperm(len(dataset))[:max_images]
+            dataset = torch.utils.data.Subset(dataset, indices)
+        
+        # Save original images to output directory
+        logger.info("Saving original images...")
+        progress_bar = tqdm(range(len(dataset)), desc="Saving images")
+        for i in progress_bar:
+            try:
+                # Get image from dataset (handle both tuple and direct image returns)
+                item = dataset[i]
+                if isinstance(item, tuple):
+                    img = item[0]  # Get image from (image, label) tuple
+                else:
+                    img = item
+                    
+                # Convert from [-1, 1] to [0, 1]
+                img = (img + 1.0) / 2.0
+                
+                # Convert to PIL Image
+                img_pil = transforms.ToPILImage()(img)
+                
+                # Save using PIL's save method
+                save_path = os.path.join(original_images_dir, f"image_{i:05d}.png")
+                img_pil.save(save_path, "PNG", optimize=True)  # Use optimization to reduce file size
+                
+                # Clean up memory
+                del img_pil
+                torch.cuda.empty_cache()  # If using GPU
+                
+                # Update progress bar
+                progress_bar.set_postfix({"Saved": f"{i+1}/{len(dataset)}"})
+                
+            except OSError as e:
+                if "No space left on device" in str(e):
+                    logger.error("No space left on device. Please free up some disk space or use a different directory.")
+                    raise
+                else:
+                    raise
+            except Exception as e:
+                logger.error(f"Error saving image {i}: {str(e)}")
+                raise
+        
+        # Update dataset path to original images directory
+        dataset_path = original_images_dir
     
     # Create symmetrized dataset if requested
     if args.create_dataset or args.symmetrized_dataset_path is None:
